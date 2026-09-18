@@ -4,10 +4,11 @@
 /**
  * @brief Multiplies two matricies, A & B.
  * 
- * @param A Matrix A
- * @param B Matrix B
- * @param C Output Matrix 
- * @param N Number of rows 
+ * @param A Matrix A.
+ * @param B Matrix B.
+ * @param C Output Matrix. 
+ * @param N Number of rows.
+ * @param TILE_SIZE The size of each tile.
  * 
  * @note Algorithm assumes A and B are square matricies 
  */
