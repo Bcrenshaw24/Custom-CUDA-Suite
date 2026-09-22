@@ -72,7 +72,7 @@ __global__ void matrixMulTiled(const float* A, const float* B, float* C, int N) 
  * launchGEMM(a, b, c, 2, 2);
  * ```
  */
-float launchGEMM(const float* A, const float* B, float* C, const int N, const int TILE_SIZE) {
+void launchGEMM(const float* A, const float* B, float* C, const int N, const int TILE_SIZE) {
     float *d_A, *d_B, *d_C;
     int size = N * N * sizeof(float);
 
