@@ -54,3 +54,46 @@ __global__ void matrixMulTiled(const float* A, const float* B, float* C, int N) 
     }
 
 }
+
+/**
+ * @brief Multiplies two matricies, A & B.
+ *
+ * @param A Matrix A.
+ * @param B Matrix B.
+ * @param C Output Matrix.
+ * @param N Number of rows.
+ * @param TILE_SIZE size of each tile 
+ *
+ * ### Examples
+ * ```cpp
+ * int a[] = {{1, 2}, {3, 4}};
+ * int b[] = {{5, 6}, {7, 8}};
+ * int c[] = {{0, 0}, {0, 0}}; 
+ * launchGEMM(a, b, c, 2, 2);
+ * ```
+ */
+float launchGEMM(const float* A, const float* B, float* C, const int N, const int TILE_SIZE) {
+    float *d_A, *d_B, *d_C;
+    int size = N * N * sizeof(float);
+
+    cudaMalloc((void**)&d_A, size);
+    cudaMalloc((void**)&d_B, size);
+    cudaMalloc((void**)&d_C, size);
+
+    cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice);
+
+    dim3 dimBlock(TILE_SIZE, TILE_SIZE);
+
+    dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x, (N + dimBlock.y - 1) / dimBlock.y);
+
+    matrixMulTiled<TILE_SIZE><<<dimGrid, dimBlock>>>(d_A, d_B, d_C, N);
+
+    cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    return 0;
+}
