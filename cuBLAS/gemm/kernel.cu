@@ -3,17 +3,17 @@
 
 /**
  * @brief Multiplies two matricies, A & B.
- * 
+ *
  * @param A Matrix A.
  * @param B Matrix B.
- * @param C Output Matrix. 
+ * @param C Output Matrix.
  * @param N Number of rows.
- * @param TILE_SIZE The size of each tile.
- * 
- * @note Algorithm assumes A and B are square matricies 
+ *
+ * @note Algorithm assumes A and B are square matricies
  */
 
-__global__ void matrixMulTiled(const float* A, const float* B, float* C, int N, int TILE_SIZE) {
+template <int TILE_SIZE>
+__global__ void matrixMulTiled(const float* A, const float* B, float* C, int N) {
 
     __shared__ float s_A[TILE_SIZE][TILE_SIZE];
     __shared__ float s_B[TILE_SIZE][TILE_SIZE];
