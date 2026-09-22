@@ -1,5 +1,4 @@
-#include <iostream>
-#include <cuda_runtime.h>
+#include "kernel.cuh"
 
 /**
  * @brief Multiplies two matricies, A & B.

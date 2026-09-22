@@ -1,4 +1,5 @@
 #pragma once
+#include <cuda_runtime.h>
 //Exposes endpoints to other programs 
 
 //Square Matricies API Signature
