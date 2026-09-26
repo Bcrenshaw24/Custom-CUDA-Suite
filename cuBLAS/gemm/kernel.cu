@@ -10,7 +10,6 @@
  *
  * @note Algorithm assumes A and B are square matricies
  */
-
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(const float* A, const float* B, float* C, int N) {
 
