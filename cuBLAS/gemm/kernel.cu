@@ -1,4 +1,4 @@
-#include "kernel.cuh"
+#include "gemm.cuh"
 
 /**
  * @brief Multiplies two matricies, A & B.
@@ -71,7 +71,8 @@ __global__ void matrixMulTiled(const float* A, const float* B, float* C, int N) 
  * launchGEMM(a, b, c, 2, 2);
  * ```
  */
-void launchGEMM(const float* A, const float* B, float* C, const int N, const int TILE_SIZE) {
+template<int TILE_SIZE>
+void launchGEMM(const float* A, const float* B, float* C, const int N) {
     float *d_A, *d_B, *d_C;
     int size = N * N * sizeof(float);
 
@@ -93,6 +94,4 @@ void launchGEMM(const float* A, const float* B, float* C, const int N, const int
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
-
-    return 0;
 }
