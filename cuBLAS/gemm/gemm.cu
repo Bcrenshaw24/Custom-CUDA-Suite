@@ -24,6 +24,7 @@ __global__ void blockTiledGEMM(const float* A, const float* B, float* C, const i
     const uint block_row = blockIdx.x;
     const uint block_col = blockIdx.y;
 
+    //Tiled matricies
     __shared__ float s_A[BM * BK];
     __shared__ float s_B[BK * BN];
 
@@ -31,19 +32,23 @@ __global__ void blockTiledGEMM(const float* A, const float* B, float* C, const i
     const uint thread_row = threadIdx.x / (BN / TN); 
     const uint thread_col = threadIdx.y % (BN / TN); 
     const uint num_threads = (BM / TM) * (BN / TN);
-
+    
+    //Offset to make indexing easier
     A += block_row * BM * K; 
     B += block_col * BN;
     C += block_row * BM * N + block_col * BN;
 
+    //Register tiling
     float thread_results[TM * TN] = {0.0f};
     float register_m[TM] = {0.0f};
     float register_n[TN] = {0.0f};
 
 
+    //Iterating over each column of blocks
     for (uint block_k = 0; block_k < K; block_k += BK) {
-    
+    //Allows compiler to store values in registers
     #pragma unroll 
+        //Iterates through each thread-block in A, loading into shared memory
         for (uint load_a = 0; load_a < BM * BK; load_a += num_threads) { 
             uint load_idx = threadIdx.x + load_a;
             uint a_row = load_idx / BK; 
@@ -56,6 +61,7 @@ __global__ void blockTiledGEMM(const float* A, const float* B, float* C, const i
         }
 
     #pragma unroll 
+        //Iterates through each thread-block in B, loading into shared memory
         for (uint load_b = 0; load_b < BK * BN; load_b += num_threads) { 
             uint load_idx = threadIdx.x + load_b; 
             uint b_row = load_idx / BN; 
@@ -67,10 +73,11 @@ __global__ void blockTiledGEMM(const float* A, const float* B, float* C, const i
             }
         }
         __syncthreads();
-
+        //Offset to calculate dot product
         A += BK; 
         B += BK * N;
 
+        //Adds values to registers -> Computes dot product
         for (uint dot_idx = 0; dot_idx < BK; ++dot_idx) { 
             for (uint i = 0; i < TM; ++i) { 
                 register_m[i] = s_A[(thread_row * TM + i) * BK + dot_idx];
@@ -90,6 +97,7 @@ __global__ void blockTiledGEMM(const float* A, const float* B, float* C, const i
         __syncthreads();
     }
 
+    //Stores results in C
     #pragma unroll 
     for (uint res_m = 0; res_m < TM; ++res_m) { 
     #pragma unroll 
