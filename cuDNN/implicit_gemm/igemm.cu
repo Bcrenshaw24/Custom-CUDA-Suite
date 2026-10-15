@@ -1,3 +1,4 @@
+#include "igemm.cuh"
 /** 
  * Implicit GEMM (General Matrix Multiply).
  * 
@@ -10,8 +11,6 @@
  * 
  */
 
-
- //Dynamic TILE_SIZE 
 template <int TILE_SIZE>
 __global__ void implicit_gemm(
     const float* __restrict__ input,  // Shape: [N, C, H, W]
@@ -21,6 +20,7 @@ __global__ void implicit_gemm(
     int K, int R, int S,              // Filter dims
     int P, int Q                      // Output spatial dims
 ) {
+    __shared__ float s_I[TILE_SIZE + ]; 
 
     int row = blockIdx.y * blockDim.y + threadIdx.y; 
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -77,7 +77,8 @@ __global__ void implicit_gemm(
  * @param Q Width of output image.
  * @param TILE_SIZE size of each tile .
  */
-void launchIGEMM(const float *input, const float* weight, float *output, int N, int C, int H, int W, int K, int R, int S, int P, int Q, int TILE_SIZE)
+template <int TILE_SIZE>
+void launchIGEMM(const float *input, const float* weight, float *output, int N, int C, int H, int W, int K, int R, int S, int P, int Q)
 { 
     float* d_I, float* d_W, float* d_O;
     
