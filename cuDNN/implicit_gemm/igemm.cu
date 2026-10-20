@@ -1,97 +1,184 @@
 #include "igemm.cuh"
-/** 
- * Implicit GEMM (General Matrix Multiply).
+
+
+/**
+ * @brief Performs a convolution across a matrix.
+ *
+ * @tparam TILE_SIZE Size of Each Tile
+ * @tparam R Height of Filter
+ * @tparam S Width of Filter
  * 
- * Primarily used for dense convolutions. 
- * 
- * Similar to standard GEMM but skips copying over chunks of an image, 
- * computes local indicies directly from global indicies.
- * 
- * Note: Will implemnt tiling at a later time.
- * 
+ * @param input Input Matrix
+ * @param weight Weight Matrix
+ * @param output Output Matrix.
+ * @param N Batch Size
+ * @param C Number of Input Channels
+ * @param H Input Height
+ * @param W Output Height
+ * @param K Number of Filters
+ * @param P Output Height
+ * @param Q Output Width
  */
-
-template <int TILE_SIZE>
+template <int TILE_SIZE, int R, int S>
 __global__ void implicit_gemm(
-    const float* __restrict__ input,  // Shape: [N, C, H, W]
-    const float* __restrict__ weight, // Shape: [K, C, R, S]
-    float* __restrict__ output,       // Shape: [N, K, P, Q] Different dim. due to padding in input
-    int N, int C, int H, int W,       // Input dims
-    int K, int R, int S,              // Filter dims
-    int P, int Q                      // Output spatial dims
+    const float* __restrict__ input,  // Shape: [N, H, W, C]
+    const float* __restrict__ weight, // Shape: [R, S, C, K]
+    float* __restrict__ output,       // Shape: [N, P, Q, K] 
+    int N, int C, int H, int W,       
+    int K,                           
+    int P, int Q                     
 ) {
-    __shared__ float s_I[TILE_SIZE + ]; 
+    int tile_h = TILE_SIZE + R - 1;
+    int tile_w = TILE_SIZE + S - 1;
 
-    int row = blockIdx.y * blockDim.y + threadIdx.y; 
+    __shared__ float s_I[(TILE_SIZE + R - 1) * (TILE_SIZE + S - 1)];
+    __shared__ float s_W[R * S];
+
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
-
+ 
     //Each output pixel is a weighted sum of the surrounding pixels
     float accum = 0.0f;
 
-    //Calculates input matricies indicies per pixel per image per batch
+    //Calculates output indicies
     int n = row / (P * Q);
-    int rem = row % (P * Q);
-    int p = rem / Q;
-    int q = rem % Q;
+    int res = row % (P * Q);
+    int p = res / Q;
+    int q = res % Q;
 
-    //Thread has to be within output indicies, threads can't be lower than 0
-    if ((row < P * Q * N) && (col < K)) {
+    //Local indicies
+    int local_p = p % tile_h;
+    int local_q = q % tile_w;
 
-    for (int i = 0; i < C * R * S; ++i) {
 
-        //Mapping kernel indicies
-        int c = i / (R * S); 
-        int res = i % (R * S);
-        int r = res / S;
-        int s = res % S;
+    //Chunking, tiling per channel
+    for (int c = 0; c < C; ++c) {
 
-        //Mapping input indicies ((r, s) act as an offset)
-        int h = p + r;
-        int w = q + s;
+        //Tiling input and weight matricies
+        for (int r = 0; r < R; ++r) { 
+          for (int s = 0; s < S; ++s) { 
 
-        if (h >= H || h < 0 || w >= W || w < 0) { 
-            continue;
+            //Calculates input indicies
+            int h = p + r; 
+            int w = q + s; 
+            int input_idx = n * (H * W * C) + h * (W * C) + w * C + c;
+            
+            if (n < N && h < H && w < W && c < C) {
+              s_I[(local_p + r) * tile_w + (local_q + s)] = input[input_idx]; 
+            }
+            else { 
+              s_I[(local_p + r) * tile_w + (local_q + s)] = 0.0f;
+            }
+
+            int weight_idx = r * (S * C * K) + s * (C * K) + c * K + col;
+
+            if (c < C && col < K) {
+              s_W[r * S + s] = weight[weight_idx];
+            }
+            else { 
+              s_W[r * S + s] = 0.0f;
+            }
+          }
+
         }
-    
-        accum += (input[h][w] * weight[r][s]);
+
+        __syncthreads();
+
+        for (int r = 0; r < R; ++r) { 
+          for (int s = 0; s < S; ++s) { 
+            accum += s_I[(local_p + r) * tile_w + (local_q + s)] * s_W[r * S + s];
+          } 
+        }
+
+        __syncthreads();
+
+
     }
+
+    int global_idx = n * (P * Q * K) + p * (Q * K) + q * K + col;
+    if (n < N && p < P && q < Q and col < K) {
+        output[global_idx] = 0 + accum;
+    }
+
 }
 
-    output[p][q] = accum;
-}
 
 /**
- * @brief Perfoms a convolution on N imagees.
+ * @brief Performs a convolution across a matrix.
  *
- * @param input Input Matrix of size N * C * H * W.
- * @param weight Weight Matrix of size K * C * R * S.
- * @param output Output Matrix of size N * K * P * Q.
- * @param N Number of images.
- * @param C Number of color channels.
- * @param H Height of input images.
- * @param W Width of input images. 
- * @param K Number of filters.
- * @param R Height of filters.
- * @param S Width of filters.
- * @param P Height of output image. 
- * @param Q Width of output image.
- * @param TILE_SIZE size of each tile .
+ * @tparam TILE_SIZE Size of Each Tile
+ * @tparam R Height of Filter
+ * @tparam S Width of Filter
+ * 
+ * @param input Input Matrix
+ * @param weight Weight Matrix
+ * @param output Output Matrix.
+ * @param N Batch Size
+ * @param C Number of Input Channels
+ * @param H Input Height
+ * @param W Output Height
+ * @param K Number of Filters
+ * @param P Output Height
+ * @param Q Output Width
+ * 
+ * @note Assumes no padding and output dims is manual calculation. Will add stride/padding/dialation at a later date.
+ * 
+ *  ### Examples
+ * ```cpp
+ *  // Input
+ *  const int N = 1;
+ *  const int H = 12;
+ *  const int W = 12;
+ *  const int C = 3;
+ *
+ *  // Weight
+ *  const int K = 1;
+ *  const int R = 2;
+ *  const int S = 2;
+ *
+ *  // Output
+ *  const int P = 11;
+ *  const int Q = 11;
+ *
+ *  size_t input_elements  = (size_t)N * H * W * C;
+ *  size_t weight_elements = (size_t)K * R * S * C;   
+ *  size_t output_elements = (size_t)N * K * P * Q;
+ *
+ *  std::vector<float> h_I(input_elements, 1.0f);
+ *  std::vector<float> h_W(weight_elements, 2.0f);
+ *  std::vector<float> h_O(output_elements, 0.0f);
+ *  std::vector<float> h_O_cudnn(output_elements, 0.0f);
+ *  launchIGEMM<16, R, S>(h_I.data(), h_W.data(), h_O.data(), N, C, H, W, K, P, Q);
+ * ```
  */
-template <int TILE_SIZE>
-void launchIGEMM(const float *input, const float* weight, float *output, int N, int C, int H, int W, int K, int R, int S, int P, int Q)
-{ 
-    float* d_I, float* d_W, float* d_O;
-    
-    int input_size = N * C * H * W * sizeof(float); 
-    int weight_size = R * S * sizeof(float); 
-    int output_size = N * K * P * Q * sizeof(float); 
+template <int TILE_SIZE, int R, int S>
+void launchIGEMM(const float *input, const float* weight, float *output, int N, int C, int H, int W, int K, int P, int Q)
+{
+    float* d_I;
+    float* d_W;
+    float* d_O;
 
-    cudaMalloc((void**)d_I, input_size);
-    cudaMalloc((void**)d_W, weight_size);
-    cudaMalloc((void**)d_O, output_size);
+    size_t input_size = N * H * W * C * sizeof(float);
+    size_t weight_size = R * S * C * K * sizeof(float);
+    size_t output_size = N * P * Q * K * sizeof(float);
+
+    cudaMalloc((void**)&d_I, input_size);
+    cudaMalloc((void**)&d_W, weight_size);
+    cudaMalloc((void**)&d_O, output_size);
+
+    cudaMemcpy(d_I, input, input_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_W, weight, weight_size, cudaMemcpyHostToDevice);
 
     dim3 dimBlock(TILE_SIZE, TILE_SIZE);
+    int gridX = (K + dimBlock.x - 1) / dimBlock.x;
+    int gridY = ((N * P * Q) + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(gridX, gridY);
 
-    dim3 dimGrid()
+    implicit_gemm<TILE_SIZE, R, S><<<dimGrid, dimBlock>>>(d_I, d_W, d_O, N, C, H, W, K, P, Q);
 
+    cudaMemcpy(output, d_O, output_size, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_I);
+    cudaFree(d_W);
+    cudaFree(d_O);
 }
