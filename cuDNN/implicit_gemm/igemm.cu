@@ -26,7 +26,7 @@ __global__ void implicit_gemm(
     float* __restrict__ output,       // Shape: [N, P, Q, K] 
     int N, int C, int H, int W,       
     int K,                           
-    int P, int Q                     
+    int P, int Q                    
 ) {
     int tile_h = TILE_SIZE + R - 1;
     int tile_w = TILE_SIZE + S - 1;
@@ -102,57 +102,12 @@ __global__ void implicit_gemm(
 
 }
 
-
-/**
- * @brief Performs a convolution across a matrix.
- *
- * @tparam TILE_SIZE Size of Each Tile
- * @tparam R Height of Filter
- * @tparam S Width of Filter
- * 
- * @param input Input Matrix
- * @param weight Weight Matrix
- * @param output Output Matrix.
- * @param N Batch Size
- * @param C Number of Input Channels
- * @param H Input Height
- * @param W Output Height
- * @param K Number of Filters
- * @param P Output Height
- * @param Q Output Width
- * 
- * @note Assumes no padding and output dims is manual calculation. Will add stride/padding/dialation at a later date.
- * 
- *  ### Examples
- * ```cpp
- *  // Input
- *  const int N = 1;
- *  const int H = 12;
- *  const int W = 12;
- *  const int C = 3;
- *
- *  // Weight
- *  const int K = 1;
- *  const int R = 2;
- *  const int S = 2;
- *
- *  // Output
- *  const int P = 11;
- *  const int Q = 11;
- *
- *  size_t input_elements  = (size_t)N * H * W * C;
- *  size_t weight_elements = (size_t)K * R * S * C;   
- *  size_t output_elements = (size_t)N * K * P * Q;
- *
- *  std::vector<float> h_I(input_elements, 1.0f);
- *  std::vector<float> h_W(weight_elements, 2.0f);
- *  std::vector<float> h_O(output_elements, 0.0f);
- *  std::vector<float> h_O_cudnn(output_elements, 0.0f);
- *  launchIGEMM<16, R, S>(h_I.data(), h_W.data(), h_O.data(), N, C, H, W, K, P, Q);
- * ```
- */
 template <int TILE_SIZE, int R, int S>
-void launchIGEMM(const float *input, const float* weight, float *output, int N, int C, int H, int W, int K, int P, int Q)
+void launchIGEMMSimple(
+  const float *input, const float* weight, float *output, 
+  int N, int C, int H, int W, 
+  int K, int P, int Q
+)
 {
     float* d_I;
     float* d_W;
@@ -176,9 +131,30 @@ void launchIGEMM(const float *input, const float* weight, float *output, int N, 
 
     implicit_gemm<TILE_SIZE, R, S><<<dimGrid, dimBlock>>>(d_I, d_W, d_O, N, C, H, W, K, P, Q);
 
+    CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
+
     cudaMemcpy(output, d_O, output_size, cudaMemcpyDeviceToHost);
 
     cudaFree(d_I);
     cudaFree(d_W);
     cudaFree(d_O);
+}
+
+template <int TILE_SIZE, int R, int S>
+void launchIGEMM(
+  const float *input, const float* weight, float *output, 
+  int N, int C, int H, int W, 
+  int K, int P, int Q
+)
+{
+    dim3 dimBlock(TILE_SIZE, TILE_SIZE);
+    int gridX = (K + dimBlock.x - 1) / dimBlock.x;
+    int gridY = ((N * P * Q) + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(gridX, gridY);
+
+    implicit_gemm<TILE_SIZE, R, S><<<dimGrid, dimBlock>>>(input, weight, output, N, C, H, W, K, P, Q);
+
+    CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
 }
