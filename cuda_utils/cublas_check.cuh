@@ -15,14 +15,14 @@
  * CUBLAS_CHECK(cublasCreate(&handle));
  * @endcode
  */
-#define CUBLAS_CHECK(call)                                                      \
+#define CUBLAS_CHECK(...)                                                       \
     do {                                                                        \
-        const cublasStatus_t cublas_check_status_ = (call);                     \
+        const cublasStatus_t cublas_check_status_ = (__VA_ARGS__);                  \
         if (cublas_check_status_ != CUBLAS_STATUS_SUCCESS) {                    \
             std::fprintf(stderr, "cuBLAS error %s (%s) at %s:%d\n  in: %s\n",   \
                          cublasGetStatusName(cublas_check_status_),             \
                          cublasGetStatusString(cublas_check_status_),           \
-                         __FILE__, __LINE__, #call);                            \
+                         __FILE__, __LINE__, #__VA_ARGS__);                      \
             std::exit(EXIT_FAILURE);                                            \
         }                                                                       \
     } while (0)

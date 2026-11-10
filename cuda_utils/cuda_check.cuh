@@ -21,14 +21,14 @@
  * CUDA_CHECK(cudaMalloc(&d_ptr, bytes));
  * @endcode
  */
-#define CUDA_CHECK(call)                                                        \
+#define CUDA_CHECK(...)                                                         \
     do {                                                                        \
-        const cudaError_t cuda_check_err_ = (call);                             \
+        const cudaError_t cuda_check_err_ = (__VA_ARGS__);                          \
         if (cuda_check_err_ != cudaSuccess) {                                   \
             std::fprintf(stderr, "CUDA error %s (%s) at %s:%d\n  in: %s\n",     \
                          cudaGetErrorName(cuda_check_err_),                     \
                          cudaGetErrorString(cuda_check_err_),                   \
-                         __FILE__, __LINE__, #call);                            \
+                         __FILE__, __LINE__, #__VA_ARGS__);                      \
             std::exit(EXIT_FAILURE);                                            \
         }                                                                       \
     } while (0)
@@ -48,9 +48,9 @@
  *
  * The enclosing function must return cudaError_t.
  */
-#define CUDA_RETURN_IF_ERROR(call)                                              \
+#define CUDA_RETURN_IF_ERROR(...)                                               \
     do {                                                                        \
-        const cudaError_t cuda_check_err_ = (call);                             \
+        const cudaError_t cuda_check_err_ = (__VA_ARGS__);                          \
         if (cuda_check_err_ != cudaSuccess) {                                   \
             return cuda_check_err_;                                             \
         }                                                                       \
