@@ -98,9 +98,6 @@ cudaError_t tiledGEMM(const float* A,
  *
  * Launched with (BM / TM) * (BN / TN) threads per block.
  *
- * @warning Not yet implemented: the kernel is currently a stub and C is left
- *          unchanged. See the TODOs in blockTiledGEMM (gemm.cu).
- *
  * @tparam BM Rows of C computed per thread block.
  * @tparam BN Columns of C computed per thread block.
  * @tparam BK Depth of the K-slice staged in shared memory per iteration.

@@ -130,9 +130,6 @@ __global__ void matrixMulTiled(const float* A, const float* B, float* C, int N) 
 /**
  * @brief 2D register-tiled GEMM kernel.
  *
- * @todo NOT YET IMPLEMENTED. The body is a no-op, so regTiledGEMM currently
- *       leaves C unchanged. Follow the TODO steps below.
- *
  * Launch configuration (set by regTiledGEMM, do not change one without the other):
  *  - 1D block of (BM / TM) * (BN / TN) threads. Only threadIdx.x is meaningful.
  *  - blockIdx.y selects a band of BM rows of C, blockIdx.x a band of BN columns.
@@ -158,55 +155,20 @@ __global__ void blockTiledGEMM(const float* __restrict__ A,
                                float* __restrict__ C,
                                int M, int N, int K,
                                float alpha, float beta) {
-    // Guiding principle: never move the A/B/C pointers. Always compute GLOBAL
-    // (row, col) coordinates and index with them. Every bounds check must
-    // compare a global coordinate against M, N or K.
 
-    // TODO(1): Declare the shared-memory tiles as 2D arrays:
-    //            __shared__ float s_A[BM][BK];
-    //            __shared__ float s_B[BK][BN];
     __shared__ float s_A[BM][BK];
     __shared__ float s_B[BK][BN];
 
-    // TODO(2): Compute this block's origin in C:
-    //            block_row0 = blockIdx.y * BM;
-    //            block_col0 = blockIdx.x * BN;
-    //          and the thread count: num_threads = (BM / TM) * (BN / TN).
     int block_row0 = blockIdx.y * BM;
     int block_col0 = blockIdx.x * BN;
     int num_threads = (BM / TM) * (BN / TN);
 
-    // TODO(3): Compute this thread's COMPUTE role (which TM x TN patch it owns):
-    //            compute_row = threadIdx.y / (BN / TN);
-    //            compute_col = threadIdx.x % (BN / TN);   // threadIdx.x, not .y
-    //          It owns C rows   block_row0 + compute_row * TM + [0, TM)
-    //          and     C cols   block_col0 + compute_col * TN + [0, TN).
     int compute_row = threadIdx.x / (BN / TN); 
     int compute_col = threadIdx.x % (BN / TN);
 
-    // TODO(4): Declare per-thread registers:
-    //            float acc[TM][TN] = {};   // 2D, so no TM/TN index mix-ups
-    //            float a_reg[TM];
-    //            float b_reg[TN];
     float acc[TM][TN] = {};
     float a_reg[TM];
     float b_reg[TN];
-
-    // TODO(5): Main loop: for (int k0 = 0; k0 < K; k0 += BK) {
-    //
-    //   (a) Cooperatively load s_A (BM x BK elements, num_threads threads):
-    //         for (int i = threadIdx.x; i < BM * BK; i += num_threads) {
-    //             int r = i / BK, c = i % BK;              // LOAD role, tile-local
-    //             int g_row = block_row0 + r, g_col = k0 + c;  // global
-    //             s_A[r][c] = (g_row < M && g_col < K) ? A[(size_t)g_row * K + g_col] : 0.0f;
-    //         }
-    //       Note the store goes to the tile-local index derived from i, not
-    //       to the loop's starting offset.
-    //
-    //   (b) Same for s_B (BK x BN): r = i / BN, c = i % BN,
-    //       g_row = k0 + r, g_col = block_col0 + c, bounds-check against K and N.
-    //
-    //   (c) __syncthreads();   // tiles fully loaded before anyone reads them
 
     for (int k = 0; k < K; k += BK) { 
         for (int i = threadIdx.x; i < BM * BK; i += num_threads) { 
